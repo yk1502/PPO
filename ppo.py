@@ -43,10 +43,15 @@ class ValueNet(nn.Module):
         return out
 
 
+
 class PPO:
     def __init__(self):
         self.policy_net = PolicyNet()
         self.value_net = ValueNet()
+
+    def get_action(self, obs):
+        action, act_mat = self.policy_net.p(obs)
+        return action, act_mat
         
     
 
