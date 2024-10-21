@@ -43,6 +43,39 @@ class ValueNet(nn.Module):
         return out
 
 
+    
+class Memory:
+    def __init__(self):
+        self.obs_traj = []
+        self.act_traj = []
+        self.rew_traj = []
+        self.new_obs_traj = []
+        self.done_traj = []        
+
+    def store_mem(self, obs, act, rew, new_obs, done):
+        self.obs_traj.append(obs)
+        self.act_traj.append(act)
+        self.rew_traj.append(rew)
+        self.new_obs_traj.append(new_obs)
+        self.done_traj.append(done)
+
+    def clear_mem(self):
+        self.obs_traj.clear()
+        self.act_traj.clear()
+        self.rew_traj.clear()
+        self.new_obs_traj.clear()
+        self.done_traj.clear()
+
+    def get_mem(self):
+        return torch.tensor(self.obs_traj),  \
+                torch.tensor(self.act_traj),  \
+                torch.tensor(self.rew_traj),  \
+                torch.tensor(self.new_obs_traj),  \
+                torch.tensor(self.done_traj)  
+
+
+
+
 
 class PPO:
     def __init__(self):
