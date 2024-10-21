@@ -18,17 +18,37 @@ class PolicyNet(nn.Module):
         out = self.softmax(self.linear2(out))
         return out
     
-    def pred(self, observation):
+    def p(self, observation):
         act_mat = self.forward(torch.from_numpy(observation))
         action = torch.multinomial(act_mat, num_samples=1, replacement=True).item()
         return action, act_mat
+    
 
+class ValueNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.linear1 = nn.Linear(4, 64)
+        self.linear2 = nn.Linear(64, 1)
+
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        out = self.relu(self.linear1(x))
+        out = self.linear2(out)
+        return out
+
+    def v(self, x):
+        out = self.forward(torch.from_numpy(x))
+        return out
+    
 
 env = gym.make('CartPole-v1')
 obs, _ = env.reset()
 
 # Setup
-policy = PolicyNet()
+policy_net = PolicyNet()
+value_net = ValueNet()
 episodes = 10
 
 
@@ -38,7 +58,8 @@ for ep in range(episodes):
 
     while True:
         
-        action, act_mat = policy.pred(obs)
+        action, act_mat = policy_net.p(obs)
+        value = value_net.v(obs)
 
         obs, rew, terminated, truncated, info = env.step(action)
         total_rew += rew
