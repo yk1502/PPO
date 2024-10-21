@@ -18,8 +18,8 @@ class PolicyNet(nn.Module):
         out = self.softmax(self.linear2(out))
         return out
     
-    def p(self, observation):
-        act_mat = self.forward(torch.from_numpy(observation))
+    def p(self, obs):
+        act_mat = self.forward(torch.from_numpy(obs))
         action = torch.multinomial(act_mat, num_samples=1, replacement=True).item()
         return action, act_mat
     
@@ -41,6 +41,13 @@ class ValueNet(nn.Module):
     def v(self, x):
         out = self.forward(torch.from_numpy(x))
         return out
+
+
+class PPO:
+    def __init__(self):
+        self.policy_net = PolicyNet()
+        self.value_net = ValueNet()
+        
     
 
 env = gym.make('CartPole-v1')
