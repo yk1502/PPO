@@ -49,44 +49,57 @@ class Memory:
     def __init__(self):
         self.obs_traj = []
         self.act_traj = []
+        self.act_prob_traj = []
         self.rew_traj = []
         self.new_obs_traj = []
         self.done_traj = []   
+        self.values_traj = []
 
         self.disc_ret_traj = []
 
 
     def shuffle_mem(self):
-        combined = list(zip(self.obs_traj, self.act_traj, self.rew_traj, self.new_obs_traj, self.done_traj))
+        combined = list(zip(self.obs_traj, self.act_traj, self.act_prob_traj, self.rew_traj, self.new_obs_traj, self.done_traj, self.values_traj, self.disc_ret_traj))
         random.shuffle(combined)
-        obs_traj, act_traj, rew_traj, new_obs_traj, done_traj = zip(*combined)
+        obs_traj, act_traj, act_prob_traj, rew_traj, new_obs_traj, done_traj, values_traj, disc_ret_traj = zip(*combined)
 
         self.obs_traj = list(obs_traj)
         self.act_traj = list(act_traj)
+        self.act_prob_traj = list(act_prob_traj)
         self.rew_traj = list(rew_traj)
         self.new_obs_traj = list(new_obs_traj)
         self.done_traj = list(done_traj)    
+        self.values_traj = list(values_traj)
+        self.disc_ret_traj = list(disc_ret_traj)
 
-    def store_mem(self, obs, act, rew, new_obs, done):
+    def store_mem(self, obs, act, act_prob, rew, new_obs, done, value):
         self.obs_traj.append(obs)
         self.act_traj.append(act)
+        self.act_prob_traj.append(act_prob)
         self.rew_traj.append(rew)
         self.new_obs_traj.append(new_obs)
         self.done_traj.append(done)
+        self.values_traj.append(value)
 
     def clear_mem(self):
         self.obs_traj.clear()
         self.act_traj.clear()
+        self.act_prob_traj.clear()
         self.rew_traj.clear()
         self.new_obs_traj.clear()
         self.done_traj.clear()
+        self.values_traj.clear()
+        self.disc_ret_traj.clear()
 
     def get_mem(self):
         return torch.tensor(self.obs_traj),  \
                 torch.tensor(self.act_traj),  \
+                torch.tensor(self.act_prob_traj),  \
                 torch.tensor(self.rew_traj),  \
                 torch.tensor(self.new_obs_traj),  \
-                torch.tensor(self.done_traj)  
+                torch.tensor(self.done_traj),  \
+                torch.tensor(self.values_traj),  \
+                torch.tensor(self.disc_ret_traj)  
 
 
 
@@ -110,7 +123,7 @@ class PPO:
             for j in range(i, len(self.memory.rew_traj)):
                 if self.memory.done_traj[j] == 1:
                     returns = 0
-                else :
+                else:
                     returns += self.memory.rew_traj[j] * (self.gamma ** (j - i))
             self.memory.disc_ret_traj.append(returns)
 
