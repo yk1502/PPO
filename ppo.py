@@ -56,12 +56,13 @@ class Memory:
         self.values_traj = []
 
         self.disc_ret_traj = []
+        self.adv_traj = []
 
 
     def shuffle_mem(self):
-        combined = list(zip(self.obs_traj, self.act_traj, self.act_prob_traj, self.rew_traj, self.new_obs_traj, self.done_traj, self.values_traj, self.disc_ret_traj))
+        combined = list(zip(self.obs_traj, self.act_traj, self.act_prob_traj, self.rew_traj, self.new_obs_traj, self.done_traj, self.values_traj, self.disc_ret_traj, self.adv_traj))
         random.shuffle(combined)
-        obs_traj, act_traj, act_prob_traj, rew_traj, new_obs_traj, done_traj, values_traj, disc_ret_traj = zip(*combined)
+        obs_traj, act_traj, act_prob_traj, rew_traj, new_obs_traj, done_traj, values_traj, disc_ret_traj, adv_traj = zip(*combined)
 
         self.obs_traj = list(obs_traj)
         self.act_traj = list(act_traj)
@@ -71,6 +72,7 @@ class Memory:
         self.done_traj = list(done_traj)    
         self.values_traj = list(values_traj)
         self.disc_ret_traj = list(disc_ret_traj)
+        self.adv_traj = list(adv_traj)
 
     def store_mem(self, obs, act, act_prob, rew, new_obs, done, value):
         self.obs_traj.append(obs)
@@ -90,6 +92,7 @@ class Memory:
         self.done_traj.clear()
         self.values_traj.clear()
         self.disc_ret_traj.clear()
+        self.adv_traj.clear()
 
     def get_mem(self):
         return torch.tensor(self.obs_traj),  \
@@ -99,7 +102,8 @@ class Memory:
                 torch.tensor(self.new_obs_traj),  \
                 torch.tensor(self.done_traj),  \
                 torch.tensor(self.values_traj),  \
-                torch.tensor(self.disc_ret_traj)  
+                torch.tensor(self.disc_ret_traj),  \
+                torch.tensor(self.adv_traj)
 
 
 
