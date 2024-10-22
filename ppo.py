@@ -108,7 +108,10 @@ class PPO:
         for i in range(len(self.memory.rew_traj)):
             returns = 0
             for j in range(i, len(self.memory.rew_traj)):
-                returns += self.memory.rew_traj[j] * (self.gamma ** (j - i))
+                if self.memory.done_traj[j] == 1:
+                    returns = 0
+                else :
+                    returns += self.memory.rew_traj[j] * (self.gamma ** (j - i))
             self.memory.disc_ret_traj.append(returns)
 
         
