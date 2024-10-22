@@ -51,7 +51,10 @@ class Memory:
         self.act_traj = []
         self.rew_traj = []
         self.new_obs_traj = []
-        self.done_traj = []    
+        self.done_traj = []   
+
+        self.disc_ret_traj = []
+
 
     def shuffle_mem(self):
         combined = list(zip(self.obs_traj, self.act_traj, self.rew_traj, self.new_obs_traj, self.done_traj))
@@ -93,10 +96,21 @@ class PPO:
     def __init__(self):
         self.policy_net = PolicyNet()
         self.value_net = ValueNet()
+        self.memory = Memory()
+
+        self.gamma = 0.99
 
     def get_action(self, obs):
         action, act_mat = self.policy_net.p(obs)
         return action, act_mat
+    
+    def calc_return(self):
+        for i in range(len(self.memory.rew_traj)):
+            returns = 0
+            for j in range(i, len(self.memory.rew_traj)):
+                returns += self.memory.rew_traj[j] * (self.gamma ** (j - i))
+            self.memory.disc_ret_traj.append(returns)
+
         
     
 
@@ -104,8 +118,7 @@ env = gym.make('CartPole-v1')
 obs, _ = env.reset()
 
 # Setup
-policy_net = PolicyNet()
-value_net = ValueNet()
+agent = PPO()
 episodes = 10
 
 
@@ -115,8 +128,7 @@ for ep in range(episodes):
 
     while True:
         
-        action, act_mat = policy_net.p(obs)
-        value = value_net.v(obs)
+        action, act_mat = agent.get_action.p(obs)
 
         obs, rew, terminated, truncated, info = env.step(action)
         total_rew += rew
