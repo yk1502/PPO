@@ -132,6 +132,7 @@ class PPO:
                     returns += self.memory.rew_traj[j] * (self.gamma ** (j - i))
             self.memory.disc_ret_traj.append(returns)
 
+    
     def calc_advantage(self):
         for i in range(len(self.memory.rew_traj)):
             advantage = 0
