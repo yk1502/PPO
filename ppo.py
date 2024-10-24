@@ -116,6 +116,7 @@ class PPO:
         self.memory = Memory()
 
         self.gamma = 0.99
+        self.lamda = 0.95
 
     def get_action(self, obs):
         action, act_mat = self.policy_net.p(obs)
@@ -131,8 +132,17 @@ class PPO:
                     returns += self.memory.rew_traj[j] * (self.gamma ** (j - i))
             self.memory.disc_ret_traj.append(returns)
 
-        
-    
+    def calc_advantage(self):
+        for i in range(len(self.memory.rew_traj)):
+            advantage = 0
+            for j in range(i, len(self.memory.rew_traj)):
+                if self.memory.done_traj[j] == 1:
+                    break
+                else:
+                    delta = self.memory.rew_traj[j] - self.memory.values_traj[j] + self.gamma * self.memory.values_traj[j + 1]
+                    advantage += delta * ((self.gamma * self.lamda) ** (j - i))
+            self.memory.adv_traj.append(advantage)
+
 
 env = gym.make('CartPole-v1')
 obs, _ = env.reset()
