@@ -127,7 +127,7 @@ class PPO:
             returns = 0
             for j in range(i, len(self.memory.rew_traj)):
                 if self.memory.done_traj[j] == 1:
-                    returns = 0
+                    break
                 else:
                     returns += self.memory.rew_traj[j] * (self.gamma ** (j - i))
             self.memory.disc_ret_traj.append(returns)
@@ -143,6 +143,7 @@ class PPO:
                     delta = self.memory.rew_traj[j] - self.memory.values_traj[j] + self.gamma * self.memory.values_traj[j + 1]
                     advantage += delta * ((self.gamma * self.lamda) ** (j - i))
             self.memory.adv_traj.append(advantage)
+
 
 
 env = gym.make('CartPole-v1')
