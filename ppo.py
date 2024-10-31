@@ -21,7 +21,7 @@ class PolicyNet(nn.Module):
     
     def p(self, obs):
         act_mat = self.forward(torch.from_numpy(obs))
-        action = torch.multinomial(act_mat, num_samples=1, replacement=True).item()
+        action = torch.multinomial(act_mat, num_samples=1, replacement=True)
         return action, act_mat
     
 
@@ -101,7 +101,7 @@ class Memory:
                 torch.tensor(self.rew_traj),  \
                 torch.tensor(self.new_obs_traj),  \
                 torch.tensor(self.done_traj),  \
-                torch.tensor(self.values_traj),  \
+                torch.stack(self.values_traj),  \
                 torch.tensor(self.disc_ret_traj),  \
                 torch.tensor(self.adv_traj)
 
@@ -117,6 +117,14 @@ class PPO:
 
         self.gamma = 0.99
         self.lamda = 0.95
+        self.epsilon = 0.2
+
+        self.steps = 50
+        self.learning_rate = 3e-4
+
+        self.policy_optim = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
+        self.value_optim = torch.optim.Adam(self.value_net.parameters(), lr=self.learning_rate)
+        self.loss_fn = nn.MSELoss()
 
     def get_action(self, obs):
         action, act_mat = self.policy_net.p(obs)
@@ -140,9 +148,37 @@ class PPO:
                 if self.memory.done_traj[j] == 1:
                     break
                 else:
-                    delta = self.memory.rew_traj[j] - self.memory.values_traj[j] + self.gamma * self.memory.values_traj[j + 1]
+                    delta = self.memory.rew_traj[j] - self.memory.values_traj[j].item() + self.gamma * self.memory.values_traj[j + 1].item()
                     advantage += delta * ((self.gamma * self.lamda) ** (j - i))
             self.memory.adv_traj.append(advantage)
+
+    def train(self):
+        
+        self.calc_return()
+        self.calc_advantage()
+        self.memory.shuffle_mem()
+
+        obs, act, act_prob, rew, new_obs, done, _, disc_ret, adv = self.memory.get_mem()
+        act = act.unsqueeze(1)
+        disc_ret = disc_ret.unsqueeze(1)
+
+        for step in range(self.steps):
+            _, old_act_prob = self.get_action(obs.numpy())
+            ratio = act_prob / old_act_prob.gather(1, act).squeeze(1)
+            policy_loss = torch.min(ratio * adv, torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * adv).mean()
+            self.policy_optim.zero_grad()
+            policy_loss.backward()
+            self.policy_optim.step()
+
+            value = self.value_net.v(obs.numpy())
+            value_loss = self.loss_fn(value, disc_ret)
+            self.value_optim.zero_grad()
+            value_loss.backward()
+            self.value_optim.step()
+
+        self.memory.clear_mem()
+        
+
 
 
 
@@ -151,7 +187,7 @@ obs, _ = env.reset()
 
 # Setup
 agent = PPO()
-episodes = 10
+episodes = 1000
 
 
 for ep in range(episodes):
@@ -160,13 +196,21 @@ for ep in range(episodes):
 
     while True:
         
-        action, act_mat = agent.get_action.p(obs)
+        action, act_mat = agent.get_action(obs)
+        value = agent.value_net.v(obs)
 
-        obs, rew, terminated, truncated, info = env.step(action)
+        new_obs, rew, terminated, truncated, info = env.step(action.item())
+        agent.memory.store_mem(obs, action.item(), act_mat[action].item(), rew, new_obs, terminated or truncated, value)
+
         total_rew += rew
+
+        obs = new_obs
 
         if terminated or truncated:
             observation, info = env.reset()
             print(f'episode : {ep + 1} | total reward : {total_rew}')
             break
+    
+    if ((ep + 1) % 5 == 0):
+        agent.train()
             
