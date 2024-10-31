@@ -19,10 +19,16 @@ class PolicyNet(nn.Module):
         out = self.softmax(self.linear2(out))
         return out
     
-    def p(self, obs):
-        act_mat = self.forward(torch.from_numpy(obs))
-        action = torch.multinomial(act_mat, num_samples=1, replacement=True)
-        return action, act_mat
+    def p(self, obs, actions=None):
+        act_prob = self.forward(obs)
+        dist = torch.distributions.Categorical(act_prob)
+        action = dist.sample()
+        log_prob = dist.log_prob(action)
+
+        if (actions != None):
+            return actions, dist.log_prob(actions)
+
+        return action, log_prob
     
 
 class ValueNet(nn.Module):
@@ -40,7 +46,7 @@ class ValueNet(nn.Module):
         return out
 
     def v(self, x):
-        out = self.forward(torch.from_numpy(x))
+        out = self.forward(x)
         return out
 
 
@@ -95,14 +101,10 @@ class Memory:
         self.adv_traj.clear()
 
     def get_mem(self):
-        return torch.tensor(self.obs_traj),  \
-                torch.tensor(self.act_traj),  \
+        return torch.stack(self.obs_traj),  \
+                torch.tensor(self.act_traj), \
                 torch.tensor(self.act_prob_traj),  \
-                torch.tensor(self.rew_traj),  \
-                torch.tensor(self.new_obs_traj),  \
-                torch.tensor(self.done_traj),  \
-                torch.stack(self.values_traj),  \
-                torch.tensor(self.disc_ret_traj),  \
+                torch.tensor(self.disc_ret_traj), \
                 torch.tensor(self.adv_traj)
 
 
@@ -117,18 +119,19 @@ class PPO:
 
         self.gamma = 0.99
         self.lamda = 0.95
-        self.epsilon = 0.2
+        self.epsilon = 0.1
 
-        self.steps = 15
-        self.learning_rate = 0.001
+        self.steps = 30
+        self.learning_rate = 0.01
 
         self.policy_optim = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
         self.value_optim = torch.optim.Adam(self.value_net.parameters(), lr=self.learning_rate)
         self.loss_fn = nn.MSELoss()
 
-    def get_action(self, obs):
-        action, act_mat = self.policy_net.p(obs)
-        return action, act_mat
+    def pred(self, obs, actions=None):
+        action, log_prob = self.policy_net.p(obs, actions)
+        value = self.value_net.v(obs)
+        return action, log_prob, value
     
     def calc_return(self):
         for i in range(len(self.memory.rew_traj)):
@@ -148,9 +151,10 @@ class PPO:
                 if self.memory.done_traj[j] == 1:
                     break
                 else:
-                    delta = self.memory.rew_traj[j] - self.memory.values_traj[j].item() + self.gamma * self.memory.values_traj[j + 1].item()
+                    delta = self.memory.rew_traj[j] - self.memory.values_traj[j] + self.gamma * self.memory.values_traj[j + 1]
                     advantage += delta * ((self.gamma * self.lamda) ** (j - i))
             self.memory.adv_traj.append(advantage)
+
 
     def train(self):
         
@@ -158,60 +162,57 @@ class PPO:
         self.calc_advantage()
         self.memory.shuffle_mem()
 
-        obs, act, old_act_prob, rew, new_obs, done, _, disc_ret, adv = self.memory.get_mem()
-        act = act.unsqueeze(1)
-        disc_ret = disc_ret.unsqueeze(1)
+        # action, old_log_prob, disc_ret, adv are in 1d shape
+        # obs in 2d shape (traj_size, obs_size)
+        obs, actions, old_log_prob, disc_ret, adv = self.memory.get_mem()
 
         for step in range(self.steps):
-            _, act_prob = self.get_action(obs.numpy())
-            ratio = act_prob.gather(1, act).squeeze(1) / old_act_prob
-            policy_loss = -torch.min(ratio * adv, torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * adv).mean()
+            _, log_prob, value = self.pred(obs, actions)
+            ratio = (log_prob - old_log_prob).exp()
+            policy_loss_1 = ratio * adv
+            policy_loss_2 = torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * adv
+            policy_loss = -torch.min(policy_loss_1, policy_loss_2).mean()
             self.policy_optim.zero_grad()
-
-            value = self.value_net.v(obs.numpy())
-            value_loss = self.loss_fn(value, disc_ret)
-            self.value_optim.zero_grad()
-
-            loss = (value_loss + policy_loss) / 2
-            loss.backward()
+            policy_loss.backward()
             self.policy_optim.step()
+
+            value_loss = self.loss_fn(value.flatten(), disc_ret)
+            self.value_optim.zero_grad()
+            value_loss.backward()
             self.value_optim.step()
+
+
 
         self.memory.clear_mem()
         
 
 
 
-
 env = gym.make('CartPole-v1')
-obs, _ = env.reset()
-
-# Setup
+obs, _ = env.reset() # obs in numpy
+episodes = 10000
 agent = PPO()
-episodes = 1000000
 
 
 for ep in range(episodes):
-
     total_rew = 0
 
     while True:
-        
-        action, act_mat = agent.get_action(obs)
-        value = agent.value_net.v(obs)
-
+        action, log_prob, value = agent.pred(torch.from_numpy(obs))
         new_obs, rew, terminated, truncated, info = env.step(action.item())
-        agent.memory.store_mem(obs, action.item(), act_mat[action].item(), rew / 10, new_obs, terminated or truncated, value)
 
+        # have to store either in pytorch tensor, or python data type format, no numpy
+        # the obs and new_obs is in tensor, example : torch.tensor([1, 2 ,3]), stored in a python array
+        # the tensors are then stacked up together
+        agent.memory.store_mem(torch.from_numpy(obs), action.item(), log_prob, rew, torch.from_numpy(new_obs), terminated or truncated, value.item())
+        obs = new_obs
         total_rew += rew
 
-        obs = new_obs
-
-        if terminated or truncated:
-            observation, info = env.reset()
-            print(f'episode : {ep + 1} | total reward : {total_rew}')
+        if (terminated or truncated):
+            print(f"episode : {ep + 1} | total reward : {total_rew}")
+            obs, _ = env.reset() # obs in numpy
             break
-    
-    if ((ep + 1) % 5 == 0):
+
+    if (ep+1) % 5 == 0:
         agent.train()
-            
+
