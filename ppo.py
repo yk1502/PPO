@@ -8,8 +8,8 @@ class PolicyNet(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.linear1 = nn.Linear(4, 64)
-        self.linear2 = nn.Linear(64, 2)
+        self.linear1 = nn.Linear(4, 32)
+        self.linear2 = nn.Linear(32, 2)
 
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax()
@@ -29,8 +29,8 @@ class ValueNet(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.linear1 = nn.Linear(4, 64)
-        self.linear2 = nn.Linear(64, 1)
+        self.linear1 = nn.Linear(4, 32)
+        self.linear2 = nn.Linear(32, 1)
 
         self.relu = nn.ReLU()
 
@@ -119,8 +119,8 @@ class PPO:
         self.lamda = 0.95
         self.epsilon = 0.2
 
-        self.steps = 50
-        self.learning_rate = 3e-4
+        self.steps = 15
+        self.learning_rate = 0.001
 
         self.policy_optim = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
         self.value_optim = torch.optim.Adam(self.value_net.parameters(), lr=self.learning_rate)
@@ -158,22 +158,23 @@ class PPO:
         self.calc_advantage()
         self.memory.shuffle_mem()
 
-        obs, act, act_prob, rew, new_obs, done, _, disc_ret, adv = self.memory.get_mem()
+        obs, act, old_act_prob, rew, new_obs, done, _, disc_ret, adv = self.memory.get_mem()
         act = act.unsqueeze(1)
         disc_ret = disc_ret.unsqueeze(1)
 
         for step in range(self.steps):
-            _, old_act_prob = self.get_action(obs.numpy())
-            ratio = act_prob / old_act_prob.gather(1, act).squeeze(1)
-            policy_loss = torch.min(ratio * adv, torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * adv).mean()
+            _, act_prob = self.get_action(obs.numpy())
+            ratio = act_prob.gather(1, act).squeeze(1) / old_act_prob
+            policy_loss = -torch.min(ratio * adv, torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * adv).mean()
             self.policy_optim.zero_grad()
-            policy_loss.backward()
-            self.policy_optim.step()
 
             value = self.value_net.v(obs.numpy())
             value_loss = self.loss_fn(value, disc_ret)
             self.value_optim.zero_grad()
-            value_loss.backward()
+
+            loss = (value_loss + policy_loss) / 2
+            loss.backward()
+            self.policy_optim.step()
             self.value_optim.step()
 
         self.memory.clear_mem()
@@ -187,7 +188,7 @@ obs, _ = env.reset()
 
 # Setup
 agent = PPO()
-episodes = 1000
+episodes = 1000000
 
 
 for ep in range(episodes):
@@ -200,7 +201,7 @@ for ep in range(episodes):
         value = agent.value_net.v(obs)
 
         new_obs, rew, terminated, truncated, info = env.step(action.item())
-        agent.memory.store_mem(obs, action.item(), act_mat[action].item(), rew, new_obs, terminated or truncated, value)
+        agent.memory.store_mem(obs, action.item(), act_mat[action].item(), rew / 10, new_obs, terminated or truncated, value)
 
         total_rew += rew
 
