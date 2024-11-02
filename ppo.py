@@ -121,8 +121,9 @@ class PPO:
         self.lamda = 0.95
         self.epsilon = 0.1
 
-        self.steps = 30
+        self.epoch = 20
         self.learning_rate = 0.01
+        self.batch_size = 32
 
         self.policy_optim = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
         self.value_optim = torch.optim.Adam(self.value_net.parameters(), lr=self.learning_rate)
@@ -166,20 +167,26 @@ class PPO:
         # obs in 2d shape (traj_size, obs_size)
         obs, actions, old_log_prob, disc_ret, adv = self.memory.get_mem()
 
-        for step in range(self.steps):
-            _, log_prob, value = self.pred(obs, actions)
-            ratio = (log_prob - old_log_prob).exp()
-            policy_loss_1 = ratio * adv
-            policy_loss_2 = torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * adv
-            policy_loss = -torch.min(policy_loss_1, policy_loss_2).mean()
-            self.policy_optim.zero_grad()
-            policy_loss.backward()
-            self.policy_optim.step()
+        for epoch in range(self.epoch):
 
-            value_loss = self.loss_fn(value.flatten(), disc_ret)
-            self.value_optim.zero_grad()
-            value_loss.backward()
-            self.value_optim.step()
+            for i in range(int(len(actions) / self.batch_size)):
+
+                chckpoint_from = i * self.batch_size
+                chckpoint_to = chckpoint_from + self.batch_size
+
+                _, log_prob, value = self.pred(obs[chckpoint_from:chckpoint_to], actions[chckpoint_from:chckpoint_to])
+                ratio = (log_prob - old_log_prob[chckpoint_from:chckpoint_to]).exp()
+                policy_loss_1 = ratio * adv[chckpoint_from:chckpoint_to]
+                policy_loss_2 = torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * adv[chckpoint_from:chckpoint_to]
+                policy_loss = -torch.min(policy_loss_1, policy_loss_2).mean()
+                self.policy_optim.zero_grad()
+                policy_loss.backward()
+                self.policy_optim.step()
+
+                value_loss = self.loss_fn(value.flatten(), disc_ret[chckpoint_from:chckpoint_to])
+                self.value_optim.zero_grad()
+                value_loss.backward()
+                self.value_optim.step()
 
 
 
